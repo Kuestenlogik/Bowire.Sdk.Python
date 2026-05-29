@@ -33,10 +33,11 @@ from ._models import (
     PluginSetting,
     ServiceInfo,
 )
+from ._http import run_http
 from ._plugin import BowirePlugin
 from ._runtime import run
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "BowirePlugin",
@@ -47,5 +48,6 @@ __all__ = [
     "InvokeResult",
     "PluginSetting",
     "run",
+    "run_http",
     "__version__",
 ]
