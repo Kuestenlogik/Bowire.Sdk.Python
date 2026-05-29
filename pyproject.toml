@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bowire-plugin"
-version = "0.1.0"
-description = "Write a Bowire protocol plugin in Python — JSON-RPC-over-stdio sidecar SDK."
+version = "0.2.0"
+description = "Write a Bowire protocol plugin in Python — JSON-RPC sidecar SDK (stdio + HTTP/SSE)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

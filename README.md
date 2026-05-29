@@ -68,6 +68,37 @@ bowire --url myproto://your-server
 
 `bowire plugin list` tags it `[sidecar: myproto]`.
 
+## Transports: stdio (default) or HTTP/SSE
+
+The same `BowirePlugin` runs over either wire — like MCP's stdio +
+streamable-HTTP. Default is stdio (the examples above). For a
+long-running / remote service, serve it over HTTP instead:
+
+```python
+from bowire_plugin import run_http
+run_http(MyPlugin(), host="127.0.0.1", port=8770)
+```
+
+`run_http` exposes one path: `POST` for JSON-RPC requests (the response
+body is the reply), `GET` as the SSE stream that carries server
+notifications (`$/stream/data`, …). Point the manifest at it with
+`transport: "http"`:
+
+```json
+{
+  "packageId": "Acme.Bowire.Sidecar.MyProto",
+  "protocol": { "id": "myproto", "name": "MyProtocol" },
+  "transport": "http",
+  "url": "http://127.0.0.1:8770/"
+}
+```
+
+| | stdio | http |
+|---|---|---|
+| Lifecycle | Bowire spawns/kills the process | you run the service; Bowire is just a client |
+| Best for | local plugin shipped as a zip | hosted / remote / shared by many hosts |
+| Deps | none | none (stdlib `http.server`) |
+
 ## API surface
 
 | Override | When it's called | Return |

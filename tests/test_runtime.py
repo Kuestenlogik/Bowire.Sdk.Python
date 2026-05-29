@@ -9,7 +9,7 @@ import json
 from collections.abc import Iterator
 
 from bowire_plugin import BowirePlugin, InvokeResult, MethodInfo, ServiceInfo
-from bowire_plugin._runtime import _Runtime
+from bowire_plugin._runtime import _StdioRuntime
 
 
 class _Fake(BowirePlugin):
@@ -35,7 +35,7 @@ def _drive(*requests: dict) -> list[dict]:
     reply/notification it writes back."""
     stdin = io.StringIO("".join(json.dumps(r) + "\n" for r in requests))
     stdout = io.StringIO()
-    _Runtime(_Fake(), stdin, stdout).run()
+    _StdioRuntime(_Fake(), stdin, stdout).run()
     return [json.loads(line) for line in stdout.getvalue().splitlines() if line.strip()]
 
 
@@ -109,6 +109,6 @@ def test_shutdown_acks_and_stops():
 def test_malformed_json_line_is_skipped():
     stdin = io.StringIO('not json\n{"jsonrpc":"2.0","id":9,"method":"ping","params":{}}\n')
     stdout = io.StringIO()
-    _Runtime(_Fake(), stdin, stdout).run()
+    _StdioRuntime(_Fake(), stdin, stdout).run()
     out = [json.loads(x) for x in stdout.getvalue().splitlines() if x.strip()]
     assert out[0]["result"] == "pong"
