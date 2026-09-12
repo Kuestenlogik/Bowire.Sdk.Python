@@ -24,14 +24,66 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest -q
+      # The handshake is part of the assertion, not just the id: a reply
+      # without protocolVersion is what made the host treat every plugin built
+      # with this SDK as a legacy v1 sidecar (#416).
       - name: Example smoke test
         run: |
-          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            | python examples/echo/echo_plugin.py | grep -q '"id":"echo"'
+          request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+          out=$(echo "$request" | python examples/echo/echo_plugin.py)
+          echo "$out"
+          echo "$out" | grep -q '"id":"echo"'
+          echo "$out" | grep -q '"protocolVersion":1'
+
+  # Against the real host, not a test double. Every contract defect this SDK
+  # carried — a discover reply the host reads as "no services", parameter
+  # names nothing sends, a manifest the installer rejects — was invisible to a
+  # suite that only ever talked to itself. This job installs the published
+  # Bowire CLI, installs the example as a sidecar plugin the way an operator
+  # would, and asks it to discover. `bowire discover` exits 0 only when a
+  # plugin actually returned a service, so the exit code is the assertion.
+  e2e:
+    name: e2e against Bowire
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install the Bowire CLI
+        run: dotnet tool install --global Kuestenlogik.Bowire.Tool
+
+      # The zip's root has to carry sidecar.json — that is what marks the
+      # archive as a sidecar plugin. The manifest's `executable` points at
+      # echo_plugin.py, whose shebang plus the executable bit the installer
+      # sets on Unix is what lets the host spawn it.
+      - name: Package the example as a sidecar zip
+        run: |
+          cd examples/echo
+          zip -r ../../echo-python.zip sidecar.json echo_plugin.py
+          cd ../..
+          unzip -l echo-python.zip
+
+      - name: Install it as a plugin
+        run: |
+          bowire --plugin-dir "$PWD/plugins" plugin install --file echo-python.zip
+          bowire --plugin-dir "$PWD/plugins" plugin list --verbose
+
+      - name: Discover through the real host
+        run: |
+          out=$(bowire --plugin-dir "$PWD/plugins" discover --url "echo@http://localhost:1")
+          echo "$out"
+          echo "$out" | grep -q "Echo"
 
   gate:
     name: gate
-    needs: [test]
+    needs: [test, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -39,5 +91,9 @@ jobs:
         run: |
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "matrix job did not succeed: ${{ needs.test.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.e2e.result }}" != "success" ]; then
+            echo "e2e job did not succeed: ${{ needs.e2e.result }}"
             exit 1
           fi
