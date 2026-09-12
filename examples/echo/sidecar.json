@@ -4,8 +4,8 @@
     "id": "echo",
     "name": "Echo (Python)"
   },
-  "executable": "python3",
-  "args": ["echo_plugin.py"],
+  "executable": "echo_plugin.py",
   "envPrefix": "BOWIRE_ECHO_",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "transport": "stdio"
 }
