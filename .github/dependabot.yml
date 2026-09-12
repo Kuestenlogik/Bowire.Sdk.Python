@@ -1,0 +1,33 @@
+version: 2
+
+# pip (pyproject) + the workflow pins.
+#
+# The package has no runtime dependencies at all — the SDK speaks JSON-RPC
+# over the standard library on purpose — so what this watches is the dev
+# extra: pytest and ruff. Small surface, but an unwatched ruff is a lint gate
+# that silently stops gaining rules.
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions)"
