@@ -35,9 +35,9 @@ from ._models import (
 )
 from ._http import run_http
 from ._plugin import BowirePlugin
-from ._runtime import run
+from ._runtime import SIDECAR_PROTOCOL_VERSION, run
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "BowirePlugin",
@@ -48,6 +48,7 @@ __all__ = [
     "InvokeResult",
     "PluginSetting",
     "run",
+    "SIDECAR_PROTOCOL_VERSION",
     "run_http",
     "__version__",
 ]
