@@ -56,6 +56,12 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # The host spawns echo_plugin.py with the runner's python3, so the SDK
+      # has to be importable there — a plain `pip install .`, the way a plugin
+      # author installs it.
+      - name: Install the SDK
+        run: pip install .
+
       - name: Install the Bowire CLI
         run: dotnet tool install --global Kuestenlogik.Bowire.Tool
 

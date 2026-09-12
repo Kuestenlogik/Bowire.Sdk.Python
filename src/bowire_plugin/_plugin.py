@@ -69,4 +69,4 @@ class BowirePlugin:
     def shutdown(self) -> None:
         """Optional cleanup hook, called when the host asks the sidecar
         to exit. Default: no-op."""
-        return None
+        return

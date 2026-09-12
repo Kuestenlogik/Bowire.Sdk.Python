@@ -25,6 +25,7 @@ stdin/stdout to the Bowire host. This package hides the wire: subclass
 Ship the script + a ``sidecar.json`` manifest in a zip and install it
 with ``bowire plugin install --file my-plugin.zip``.
 """
+from ._http import run_http
 from ._models import (
     FieldInfo,
     InvokeResult,
@@ -33,22 +34,21 @@ from ._models import (
     PluginSetting,
     ServiceInfo,
 )
-from ._http import run_http
 from ._plugin import BowirePlugin
 from ._runtime import SIDECAR_PROTOCOL_VERSION, run
 
 __version__ = "0.3.0"
 
 __all__ = [
+    "SIDECAR_PROTOCOL_VERSION",
     "BowirePlugin",
-    "ServiceInfo",
-    "MethodInfo",
-    "MessageInfo",
     "FieldInfo",
     "InvokeResult",
+    "MessageInfo",
+    "MethodInfo",
     "PluginSetting",
-    "run",
-    "SIDECAR_PROTOCOL_VERSION",
-    "run_http",
+    "ServiceInfo",
     "__version__",
+    "run",
+    "run_http",
 ]

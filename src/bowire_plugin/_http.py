@@ -48,7 +48,7 @@ class _HttpServer:
             def log_message(self, *args: Any) -> None:  # silence default stderr logging
                 pass
 
-            def do_POST(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler API
+            def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length", "0") or "0")
                 raw = self.rfile.read(length) if length else b""
                 try:
@@ -67,7 +67,7 @@ class _HttpServer:
                     sse.put(_STOP)
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
 
-            def do_GET(self) -> None:  # noqa: N802
+            def do_GET(self) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")

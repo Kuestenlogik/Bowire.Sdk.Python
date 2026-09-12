@@ -30,7 +30,11 @@ Repository = "https://github.com/Kuestenlogik/Bowire.Sdk.Python"
 "Sidecar spec" = "https://github.com/Kuestenlogik/Bowire/blob/main/docs/architecture/sidecar-plugins.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+# ruff carries an upper bound on purpose: an unpinned linter means every
+# release of it can turn a green CI red on code nobody touched — 0.16.7 did
+# exactly that here, with six findings in files last edited in May. Dependabot
+# now proposes the bump as a reviewable PR instead.
+dev = ["pytest>=8", "ruff>=0.16,<0.17"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bowire_plugin"]
