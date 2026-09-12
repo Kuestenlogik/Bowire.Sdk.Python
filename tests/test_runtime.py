@@ -9,7 +9,7 @@ import json
 from collections.abc import Iterator
 
 from bowire_plugin import BowirePlugin, InvokeResult, MethodInfo, ServiceInfo
-from bowire_plugin._runtime import _StdioRuntime
+from bowire_plugin._runtime import SIDECAR_PROTOCOL_VERSION, _StdioRuntime
 
 
 class _Fake(BowirePlugin):
@@ -45,6 +45,50 @@ def test_initialize_reports_metadata():
     assert result["id"] == "fake"
     assert result["name"] == "Fake"
     assert result["iconSvg"] == "<svg/>"
+
+
+def test_initialize_advertises_the_contract_version():
+    # Without this the host logs "treating it as legacy sidecar contract v1.
+    # Update the sidecar SDK to send protocolVersion + capabilities" on every
+    # boot — and cannot reject a future incompatible sidecar at the handshake
+    # instead of at the first call (#416).
+    out = _drive({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert out[0]["result"]["protocolVersion"] == SIDECAR_PROTOCOL_VERSION
+
+
+def test_initialize_capabilities_follow_what_the_subclass_implements():
+    # _Fake overrides all three, and no Python plugin can do channels.
+    out = _drive({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert out[0]["result"]["capabilities"] == {
+        "discover": True,
+        "invoke": True,
+        "invokeStream": True,
+        "channels": False,
+    }
+
+
+def test_initialize_capabilities_say_no_for_an_unimplemented_method():
+    # A plugin that only discovers. Claiming invoke here would make the host
+    # round-trip to a base-class stub and render its "not implemented" string
+    # as if it were the server's answer.
+    class _DiscoverOnly(BowirePlugin):
+        id = "fake"
+        name = "Fake"
+
+        def discover(self, server_url, show_internal):
+            return []
+
+    stdin = io.StringIO(json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + chr(10))
+    stdout = io.StringIO()
+    _StdioRuntime(_DiscoverOnly(), stdin, stdout).run()
+    caps = json.loads(stdout.getvalue().splitlines()[0])["result"]["capabilities"]
+    assert caps == {
+        "discover": True,
+        "invoke": False,
+        "invokeStream": False,
+        "channels": False,
+    }
 
 
 def test_ping_returns_pong():

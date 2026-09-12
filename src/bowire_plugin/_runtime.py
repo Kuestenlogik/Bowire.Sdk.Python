@@ -13,6 +13,10 @@ runtime and the HTTP/SSE server (in ``_http``) both reuse it.
 Methods handled: initialize, ping, shutdown, discover, invoke,
 invokeStream (host-minted streamId in params; ack then emit
 ``$/stream/data`` notifications + ``$/stream/end``).
+
+The ``initialize`` reply carries ``protocolVersion`` +
+``capabilities`` (#416), so the host knows which contract it is talking to
+and which calls it can skip.
 """
 from __future__ import annotations
 
@@ -27,6 +31,35 @@ from ._plugin import BowirePlugin
 # A notification sink: hands a fully-formed JSON-RPC notification
 # envelope to whichever transport is in play (stdout line / SSE event).
 EmitFn = Callable[[dict[str, Any]], None]
+
+#: The sidecar wire-contract version this SDK speaks (#416). The host
+#: accepts a sidecar inside its supported range and refuses one outside it
+#: at the handshake, rather than failing at the first call. A sidecar that
+#: sends none at all is tolerated as contract v1 — with a warning in the
+#: host log on every boot, which is what this SDK used to earn.
+SIDECAR_PROTOCOL_VERSION = 1
+
+
+def _capabilities(plugin: BowirePlugin) -> dict[str, bool]:
+    """What this plugin can actually answer, read off the subclass.
+
+    A flag set to ``False`` lets the host skip the call entirely. The base
+    class ships a polite default for every method — ``discover`` returns
+    ``[]``, ``invoke`` an "not implemented" result — so "did the author
+    override it?" is the only honest answer to "can it do this?", and the
+    host gets to stop asking questions whose answer is a stub.
+
+    ``channels`` is always ``False``: the Python SDK has no channel surface
+    at all, so the host's ``openChannel`` would round-trip to a method-not-
+    found every time an operator opened a duplex method.
+    """
+    cls = type(plugin)
+    return {
+        "discover": cls.discover is not BowirePlugin.discover,
+        "invoke": cls.invoke is not BowirePlugin.invoke,
+        "invokeStream": cls.invoke_stream is not BowirePlugin.invoke_stream,
+        "channels": False,
+    }
 
 
 class _Dispatcher:
@@ -78,6 +111,8 @@ class _Dispatcher:
                 "id": self._plugin.id,
                 "iconSvg": self._plugin.icon_svg,
                 "settings": [s.to_dict() for s in self._plugin.settings()],
+                "protocolVersion": SIDECAR_PROTOCOL_VERSION,
+                "capabilities": _capabilities(self._plugin),
             }, None
         if method == "ping":
             return "pong", None
