@@ -41,7 +41,9 @@ jobs:
   # names its interpreter (`"executable": "python"`) and the point of that is
   # that one manifest starts on both. The host looks a bare name up on PATH
   # (Bowire >= 2.8, Kuestenlogik/Bowire#692), so the `python` setup-python puts
-  # there is the one that runs the plugin.
+  # there is the one that runs the plugin. The script then starts the
+  # workbench, sets the example's settings through the Settings dialog's own
+  # endpoint and checks the next invoke and stream use them (#4).
   e2e:
     name: e2e against Bowire (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -76,7 +78,7 @@ jobs:
       - name: Install the Bowire CLI
         run: dotnet tool install Kuestenlogik.Bowire.Tool --tool-path "$RUNNER_TEMP/bowire-tool"
 
-      - name: Install the example and discover through the real host
+      - name: Install the example, discover, and round-trip its settings
         run: python scripts/e2e.py --bowire "$RUNNER_TEMP/bowire-tool/bowire" --work "$RUNNER_TEMP/e2e"
 
   gate:

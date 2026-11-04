@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 
 from ._models import InvokeResult, PluginSetting, ServiceInfo
+from ._settings import Settings
 
 
 class BowirePlugin:
@@ -16,6 +17,10 @@ class BowirePlugin:
     Set :attr:`id`, :attr:`name`, and (optionally) :attr:`icon_svg` as
     class attributes. The ``id`` must match the ``protocol.id`` in the
     plugin's ``sidecar.json`` manifest.
+
+    Every call receives ``settings``: the values set for what
+    :meth:`settings` declared, read fresh for that call (see
+    :class:`~bowire_plugin.Settings`).
     """
 
     #: Short protocol id (e.g. ``"zenoh"``). Must match sidecar.json.
@@ -27,10 +32,17 @@ class BowirePlugin:
     icon_svg: str = ""
 
     def settings(self) -> list[PluginSetting]:
-        """Settings this plugin contributes to the Settings dialog."""
+        """Settings this plugin contributes to the Settings dialog.
+
+        Read once per process, for the ``initialize`` reply. The values come back
+        as the ``settings`` argument of every call, and the defaults
+        declared here are what its accessors return for a key nobody set.
+        """
         return []
 
-    def discover(self, server_url: str, show_internal: bool) -> Iterable[ServiceInfo]:
+    def discover(
+        self, server_url: str, show_internal: bool, settings: Settings
+    ) -> Iterable[ServiceInfo]:
         """Enumerate services + methods for ``server_url``.
 
         Return an empty list to decline the URL (the host then tries
@@ -46,6 +58,7 @@ class BowirePlugin:
         json_messages: list[str],
         show_internal: bool,
         metadata: dict[str, str],
+        settings: Settings,
     ) -> InvokeResult:
         """Perform a unary call and return the result. Default: an error
         result noting the plugin didn't implement invoke."""
@@ -59,6 +72,7 @@ class BowirePlugin:
         json_messages: list[str],
         show_internal: bool,
         metadata: dict[str, str],
+        settings: Settings,
     ) -> Iterator[str]:
         """Server-streaming call: yield each message (a JSON string) as
         it arrives. The runtime forwards every yielded value to the host

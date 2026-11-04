@@ -17,6 +17,11 @@ invokeStream (host-minted streamId in params; ack then emit
 The ``initialize`` reply carries ``protocolVersion`` +
 ``capabilities`` (#416), so the host knows which contract it is talking to
 and which calls it can skip.
+
+``discover`` / ``invoke`` / ``invokeStream`` params may carry a ``settings``
+object (Kuestenlogik/Bowire#693): the values set for the settings the plugin
+declared. Every call hands the plugin a fresh :class:`Settings` built from it,
+so a changed value applies from the next call on.
 """
 from __future__ import annotations
 
@@ -26,7 +31,9 @@ import threading
 from collections.abc import Callable
 from typing import Any, TextIO
 
+from ._models import PluginSetting
 from ._plugin import BowirePlugin
+from ._settings import Settings
 
 # A notification sink: hands a fully-formed JSON-RPC notification
 # envelope to whichever transport is in play (stdout line / SSE event).
@@ -76,10 +83,25 @@ class _Dispatcher:
         self._emit = emit
         self._stop = threading.Event()
         self._stream_threads: list[threading.Thread] = []
+        self._declared: list[PluginSetting] | None = None
 
     @property
     def stopped(self) -> bool:
         return self._stop.is_set()
+
+    def _declared_settings(self) -> list[PluginSetting]:
+        """What the plugin declared, asked once: the ``initialize`` reply and
+        every call's defaults have to agree on it. Built lazily rather than in
+        ``__init__`` so a plugin whose ``settings()`` raises fails the
+        handshake as a JSON-RPC error instead of the process start."""
+        if self._declared is None:
+            self._declared = list(self._plugin.settings())
+        return self._declared
+
+    def _call_settings(self, params: dict[str, Any]) -> Settings:
+        # Absent when nobody set anything — the common case, not an error.
+        raw = params.get("settings")
+        return Settings(raw if isinstance(raw, dict) else None, self._declared_settings())
 
     def join_streams(self, timeout: float = 5) -> None:
         """Let in-flight stream pumps flush their final frames on exit."""
@@ -110,7 +132,7 @@ class _Dispatcher:
                 "name": self._plugin.name,
                 "id": self._plugin.id,
                 "iconSvg": self._plugin.icon_svg,
-                "settings": [s.to_dict() for s in self._plugin.settings()],
+                "settings": [s.to_dict() for s in self._declared_settings()],
                 "protocolVersion": SIDECAR_PROTOCOL_VERSION,
                 "capabilities": _capabilities(self._plugin),
             }, None
@@ -126,6 +148,7 @@ class _Dispatcher:
             services = self._plugin.discover(
                 params.get("serverUrl", ""),
                 bool(params.get("showInternalServices", False)),
+                self._call_settings(params),
             )
             return [s.to_dict() for s in services], None
         if method == "invoke":
@@ -136,6 +159,7 @@ class _Dispatcher:
                 list(params.get("jsonMessages") or []),
                 bool(params.get("showInternalServices", False)),
                 dict(params.get("metadata") or {}),
+                self._call_settings(params),
             ).to_dict(), None
         if method == "invokeStream":
             stream_id = params.get("streamId")
@@ -159,6 +183,7 @@ class _Dispatcher:
                 list(params.get("jsonMessages") or []),
                 bool(params.get("showInternalServices", False)),
                 dict(params.get("metadata") or {}),
+                self._call_settings(params),
             ):
                 if self._stop.is_set():
                     break

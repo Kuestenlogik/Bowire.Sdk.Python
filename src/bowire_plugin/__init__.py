@@ -13,10 +13,11 @@ stdin/stdout to the Bowire host. This package hides the wire: subclass
         id = "myproto"
         name = "MyProtocol"
 
-        def discover(self, server_url, show_internal):
+        def discover(self, server_url, show_internal, settings):
             return [ServiceInfo("Things", methods=[MethodInfo("get")])]
 
-        def invoke(self, server_url, service, method, json_messages, show_internal, metadata):
+        def invoke(self, server_url, service, method, json_messages, show_internal, metadata,
+                   settings):
             return InvokeResult(response="hello", status="OK")
 
     if __name__ == "__main__":
@@ -33,9 +34,11 @@ from ._models import (
     MethodInfo,
     PluginSetting,
     ServiceInfo,
+    SettingOption,
 )
 from ._plugin import BowirePlugin
 from ._runtime import SIDECAR_PROTOCOL_VERSION, run
+from ._settings import Settings
 
 __version__ = "0.3.0"
 
@@ -48,6 +51,8 @@ __all__ = [
     "MethodInfo",
     "PluginSetting",
     "ServiceInfo",
+    "SettingOption",
+    "Settings",
     "__version__",
     "run",
     "run_http",

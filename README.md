@@ -26,16 +26,18 @@ class MyPlugin(BowirePlugin):
     name = "MyProtocol"
     icon_svg = "<svg/>"     # optional
 
-    def discover(self, server_url, show_internal):
+    def discover(self, server_url, show_internal, settings):
         return [ServiceInfo("Things", methods=[
             MethodInfo("get", full_name="Things/get", method_type="Unary"),
         ])]
 
-    def invoke(self, server_url, service, method, json_messages, show_internal, metadata):
+    def invoke(self, server_url, service, method, json_messages, show_internal, metadata,
+               settings):
         payload = json_messages[0] if json_messages else ""
         return InvokeResult(response=f"got {payload}", status="OK")
 
-    def invoke_stream(self, server_url, service, method, json_messages, show_internal, metadata):
+    def invoke_stream(self, server_url, service, method, json_messages, show_internal, metadata,
+                      settings):
         for i in range(5):
             yield f'{{"tick":{i}}}'   # each yield → a $/stream/data frame
 
@@ -44,6 +46,61 @@ if __name__ == "__main__":
 ```
 
 `run()` blocks, handling the contract (`initialize` / `discover` / `invoke` / `invokeStream` / `ping` / `shutdown`) until the host disconnects.
+
+## Settings
+
+A plugin declares settings once; Bowire renders them in its Settings dialog,
+under the plugin's own section (Bowire 2.8 or later). The values come back on
+every call as the `settings` argument.
+
+**Declare** them by overriding `settings()`:
+
+```python
+from bowire_plugin import PluginSetting, SettingOption
+
+class MyPlugin(BowirePlugin):
+    def settings(self):
+        return [
+            PluginSetting("probeWindow", "Probe window", type="number", default_value=5,
+                          description="Seconds to listen before answering discovery."),
+            PluginSetting("verbose", "Verbose", type="bool", default_value=False),
+            PluginSetting("mode", "Mode", type="select", default_value="fast", options=[
+                SettingOption("fast", "Fast"),
+                SettingOption("thorough", "Thorough"),
+            ]),
+        ]
+```
+
+`type` is `"bool"` (the default), `"string"`, `"number"` or `"select"`. A
+`select` needs `options`; declaring one without them raises `ValueError`.
+
+**Read** them from the `settings` argument every call receives:
+
+```python
+    def discover(self, server_url, show_internal, settings):
+        window = settings.get_float("probeWindow")   # 5.0 until somebody sets it
+        if settings.get_bool("verbose"):
+            ...
+        thorough = settings.get_str("mode") == "thorough"
+```
+
+What the accessors guarantee:
+
+- **Fresh per call.** The host sends the current values with each request, so
+  a changed setting applies from the next call — no restart. Read the
+  argument; don't copy it into the plugin at startup.
+- **Typed, with the declared default.** `get_str` / `get_bool` / `get_int` /
+  `get_float` parse the value the host sent (always a string on the wire) and
+  return the `default_value` you declared when the key is absent — the host
+  only sends keys somebody actually set. Pass `default=` to override it for
+  one read.
+- **A value that does not parse falls back** to the default, as the host's own
+  .NET accessors do: `get_bool` accepts `true` / `false` in any case,
+  `get_int` ASCII digits with an optional sign, `get_float` a finite decimal
+  with an optional exponent. A key with neither a usable value nor a default
+  raises `KeyError`.
+- `settings` is also a read-only mapping of exactly what the host sent:
+  `dict(settings)`, `"verbose" in settings`, `settings.get("mode")`.
 
 ## Ship it
 
@@ -123,25 +180,25 @@ notifications (`$/stream/data`, …). Point the manifest at it with
 
 | Override | When it's called | Return |
 |----------|------------------|--------|
-| `discover(server_url, show_internal)` | discovery | `list[ServiceInfo]` (empty = decline the URL) |
-| `invoke(server_url, service, method, json_messages, show_internal, metadata)` | unary call | `InvokeResult` |
+| `discover(server_url, show_internal, settings)` | discovery | `list[ServiceInfo]` (empty = decline the URL) |
+| `invoke(server_url, service, method, json_messages, show_internal, metadata, settings)` | unary call | `InvokeResult` |
 | `invoke_stream(...)` | server-streaming call | iterator of JSON strings (each → one frame) |
-| `settings()` | startup | `list[PluginSetting]` |
+| `settings()` | once, for the `initialize` reply | `list[PluginSetting]` |
 | `shutdown()` | host exit | `None` (cleanup hook) |
 
 Class attributes: `id` (required, matches the manifest), `name`, `icon_svg`.
 
-Models — `ServiceInfo`, `MethodInfo`, `MessageInfo`, `FieldInfo`, `InvokeResult`, `PluginSetting` — are dataclasses that serialize to the camelCase shapes the host expects.
+Models — `ServiceInfo`, `MethodInfo`, `MessageInfo`, `FieldInfo`, `InvokeResult`, `PluginSetting`, `SettingOption` — are dataclasses that serialize to the camelCase shapes the host expects. `Settings` is the per-call argument described under [Settings](#settings).
 
 ## Example
 
-[`examples/echo`](examples/echo) is a runnable plugin (unary echo + a 5-tick stream). Smoke-test it as a plain process:
+[`examples/echo`](examples/echo) is a runnable plugin (unary echo + a ticker stream) that declares and reads three settings: a reply `prefix` (string), a `letterCase` (select) and the ticker length `ticks` (number). Smoke-test it as a plain process:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | python examples/echo/echo_plugin.py
 ```
 
-Or install it into a real Bowire host and discover through it — what CI runs on Linux and Windows:
+Or install it into a real Bowire host, discover through it, and round-trip its settings through the workbench — what CI runs on Linux and Windows:
 
 ```bash
 python scripts/e2e.py --bowire "$(command -v bowire)" --work "$(mktemp -d)"

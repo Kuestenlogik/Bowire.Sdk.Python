@@ -17,15 +17,17 @@ class _Fake(BowirePlugin):
     name = "Fake"
     icon_svg = "<svg/>"
 
-    def discover(self, server_url, show_internal):
+    def discover(self, server_url, show_internal, settings):
         return [ServiceInfo("Echo", package="fake", origin_url=server_url,
                             methods=[MethodInfo("echo", full_name="Echo/echo")])]
 
-    def invoke(self, server_url, service, method, json_messages, show_internal, metadata):
+    def invoke(self, server_url, service, method, json_messages, show_internal, metadata,
+               settings):
         return InvokeResult(response="echo: " + (json_messages[0] if json_messages else ""),
                             status="OK", metadata={"service": service})
 
-    def invoke_stream(self, server_url, service, method, json_messages, show_internal, metadata) -> Iterator[str]:
+    def invoke_stream(self, server_url, service, method, json_messages, show_internal, metadata,
+                      settings) -> Iterator[str]:
         for i in range(1, 4):
             yield f'{{"tick":{i}}}'
 
@@ -75,7 +77,7 @@ def test_initialize_capabilities_say_no_for_an_unimplemented_method():
         id = "fake"
         name = "Fake"
 
-        def discover(self, server_url, show_internal):
+        def discover(self, server_url, show_internal, settings):
             return []
 
     stdin = io.StringIO(json.dumps(

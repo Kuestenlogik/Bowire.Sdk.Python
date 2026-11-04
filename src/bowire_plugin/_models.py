@@ -140,20 +140,55 @@ class InvokeResult:
 
 
 @dataclass
+class SettingOption:
+    """One choice of a ``select`` setting (mirrors BowirePluginSettingOption).
+
+    ``value`` is what the host sends back when the operator picks it;
+    ``label`` is what the dialog shows, and defaults to the value.
+    """
+
+    value: str
+    label: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"value": self.value}
+        if self.label is not None:
+            d["label"] = self.label
+        return d
+
+
+@dataclass
 class PluginSetting:
-    """A setting the plugin contributes to the Bowire Settings dialog."""
+    """A setting the plugin contributes to the Bowire Settings dialog.
+
+    ``type`` is ``"bool"``, ``"string"``, ``"number"`` or ``"select"``. A
+    ``select`` needs ``options`` — without them the dialog has nothing to
+    offer, so declaring one is refused here rather than rendered empty.
+
+    The value comes back on every call as a :class:`~bowire_plugin.Settings`
+    argument; ``default_value`` is what its accessors return while nobody
+    has set one.
+    """
 
     key: str
     label: str
     description: str | None = None
     type: str = "bool"
     default_value: Any = None
+    options: list[SettingOption] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.type == "select" and not self.options:
+            raise ValueError(f"select setting '{self.key}' declares no options")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "key": self.key,
             "label": self.label,
             "description": self.description,
             "type": self.type,
             "defaultValue": self.default_value,
         }
+        if self.options:
+            d["options"] = [o.to_dict() for o in self.options]
+        return d

@@ -4,7 +4,12 @@
 
 Discovers one "Echo" service with two methods:
   - echo   (Unary)          → echoes the request payload back
-  - ticker (ServerStreaming) → streams 5 ticks
+  - ticker (ServerStreaming) → streams a few ticks
+
+Three settings shape the answers, one of each kind the dialog renders as
+free input or a choice: ``prefix`` (string), ``letterCase`` (select) and
+``ticks`` (number). Change one in Bowire's Settings dialog and the next call
+uses it — no restart.
 
 Run it standalone for a smoke test:
     echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | python echo_plugin.py
@@ -21,7 +26,16 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from bowire_plugin import BowirePlugin, InvokeResult, MethodInfo, ServiceInfo, run
+from bowire_plugin import (
+    BowirePlugin,
+    InvokeResult,
+    MethodInfo,
+    PluginSetting,
+    ServiceInfo,
+    SettingOption,
+    Settings,
+    run,
+)
 
 
 class EchoPlugin(BowirePlugin):
@@ -29,7 +43,37 @@ class EchoPlugin(BowirePlugin):
     name = "Echo (Python)"
     icon_svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><path d="M4 12h6l3-8 4 16 3-8h0"/></svg>'
 
-    def discover(self, server_url: str, show_internal: bool) -> list[ServiceInfo]:
+    def settings(self) -> list[PluginSetting]:
+        return [
+            PluginSetting(
+                key="prefix",
+                label="Reply prefix",
+                description="Put in front of every echoed payload.",
+                type="string",
+                default_value="echo",
+            ),
+            PluginSetting(
+                key="letterCase",
+                label="Letter case",
+                type="select",
+                default_value="as-is",
+                options=[
+                    SettingOption("as-is", "As sent"),
+                    SettingOption("upper", "Upper case"),
+                ],
+            ),
+            PluginSetting(
+                key="ticks",
+                label="Ticker length",
+                description="How many ticks the ticker streams.",
+                type="number",
+                default_value=5,
+            ),
+        ]
+
+    def discover(
+        self, server_url: str, show_internal: bool, settings: Settings
+    ) -> list[ServiceInfo]:
         return [
             ServiceInfo(
                 name="Echo",
@@ -57,10 +101,14 @@ class EchoPlugin(BowirePlugin):
         json_messages: list[str],
         show_internal: bool,
         metadata: dict[str, str],
+        settings: Settings,
     ) -> InvokeResult:
         payload = json_messages[0] if json_messages else ""
+        reply = f"{settings.get_str('prefix')}: {payload}"
+        if settings.get_str("letterCase") == "upper":
+            reply = reply.upper()
         return InvokeResult(
-            response=f"echo: {payload}",
+            response=reply,
             status="OK",
             metadata={"service": service, "method": method},
         )
@@ -73,8 +121,9 @@ class EchoPlugin(BowirePlugin):
         json_messages: list[str],
         show_internal: bool,
         metadata: dict[str, str],
+        settings: Settings,
     ) -> Iterator[str]:
-        for i in range(1, 6):
+        for i in range(1, max(settings.get_int("ticks"), 0) + 1):
             yield f'{{"tick":{i}}}'
 
 
