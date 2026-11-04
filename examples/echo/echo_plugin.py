@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2026 Küstenlogik
 # SPDX-License-Identifier: Apache-2.0
 """A minimal Bowire sidecar plugin in Python.
@@ -13,6 +12,10 @@ Run it standalone for a smoke test:
 Or package echo_plugin.py + sidecar.json into a zip and install:
     bowire plugin install --file echo-sidecar.zip
     bowire --url echo://demo
+
+The manifest names the interpreter (``"executable": "python"``) and passes
+this file as its argument, so the script needs no shebang and no executable
+bit — it is a module the interpreter runs, on every platform alike.
 """
 from __future__ import annotations
 

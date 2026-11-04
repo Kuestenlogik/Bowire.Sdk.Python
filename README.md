@@ -53,11 +53,31 @@ Put the script next to a `sidecar.json` manifest:
 {
   "packageId": "Acme.Bowire.Sidecar.MyProto",
   "protocol": { "id": "myproto", "name": "MyProtocol" },
-  "executable": "python3",
+  "executable": "python",
   "args": ["my_plugin.py"],
   "version": "1.0.0"
 }
 ```
+
+The manifest names the interpreter and passes the script as its argument, so
+the script needs no shebang and no executable bit. The host first looks for
+`executable` in the plugin directory, then — for a bare name — on `PATH`
+(Bowire 2.8 or later). The SDK has to be installed into the interpreter that
+name resolves to.
+
+Why `python` and not `python3`: no single name exists on every machine, and
+`python` is the one that does wherever this SDK is installed in practice.
+
+| Where the plugin runs | `python` | `python3` |
+|---|---|---|
+| Windows, python.org installer or `actions/setup-python` | yes | no — resolves to the Microsoft Store alias, which exits without running anything |
+| Any virtual environment (`venv` on PATH), Linux, macOS or Windows | yes | Linux / macOS only — a Windows venv has no `python3.exe` |
+| Linux / macOS system interpreter, no venv | only where the distribution ships it (`python-is-python3`) | yes |
+
+The last row is also the one where `pip install bowire-plugin` is refused by
+default on current distributions (PEP 668), so a plugin there already needs a
+venv. If you ship a plugin only for Linux or macOS system interpreters, name
+`python3` instead.
 
 Zip the folder and install into Bowire:
 
@@ -119,6 +139,12 @@ Models — `ServiceInfo`, `MethodInfo`, `MessageInfo`, `FieldInfo`, `InvokeResul
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | python examples/echo/echo_plugin.py
+```
+
+Or install it into a real Bowire host and discover through it — what CI runs on Linux and Windows:
+
+```bash
+python scripts/e2e.py --bowire "$(command -v bowire)" --work "$(mktemp -d)"
 ```
 
 ## Not in scope

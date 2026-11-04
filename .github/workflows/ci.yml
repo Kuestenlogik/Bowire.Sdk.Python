@@ -35,16 +35,24 @@ jobs:
           echo "$out" | grep -q '"id":"echo"'
           echo "$out" | grep -q '"protocolVersion":1'
 
-  # Against the real host, not a test double. Every contract defect this SDK
-  # carried — a discover reply the host reads as "no services", parameter
-  # names nothing sends, a manifest the installer rejects — was invisible to a
-  # suite that only ever talked to itself. This job installs the published
-  # Bowire CLI, installs the example as a sidecar plugin the way an operator
-  # would, and asks it to discover. `bowire discover` exits 0 only when a
-  # plugin actually returned a service, so the exit code is the assertion.
+  # Against the real host, not a test double: scripts/e2e.py zips the example,
+  # installs it as a sidecar plugin the way an operator would, and asks the
+  # host to discover through it. On Linux and Windows, because the manifest
+  # names its interpreter (`"executable": "python"`) and the point of that is
+  # that one manifest starts on both. The host looks a bare name up on PATH
+  # (Bowire >= 2.8, Kuestenlogik/Bowire#692), so the `python` setup-python puts
+  # there is the one that runs the plugin.
   e2e:
-    name: e2e against Bowire
-    runs-on: ubuntu-latest
+    name: e2e against Bowire (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -56,36 +64,20 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # The host spawns echo_plugin.py with the runner's python3, so the SDK
-      # has to be importable there — a plain `pip install .`, the way a plugin
-      # author installs it.
+      # The host spawns `python echo_plugin.py`, so the SDK has to be
+      # importable by that interpreter — a plain `pip install .`, the way a
+      # plugin author installs it.
       - name: Install the SDK
-        run: pip install .
+        run: python -m pip install .
 
+      # A tool path rather than --global: the script is handed the exact
+      # executable, so nothing depends on where each runner image puts
+      # global .NET tools on PATH.
       - name: Install the Bowire CLI
-        run: dotnet tool install --global Kuestenlogik.Bowire.Tool
+        run: dotnet tool install Kuestenlogik.Bowire.Tool --tool-path "$RUNNER_TEMP/bowire-tool"
 
-      # The zip's root has to carry sidecar.json — that is what marks the
-      # archive as a sidecar plugin. The manifest's `executable` points at
-      # echo_plugin.py, whose shebang plus the executable bit the installer
-      # sets on Unix is what lets the host spawn it.
-      - name: Package the example as a sidecar zip
-        run: |
-          cd examples/echo
-          zip -r ../../echo-python.zip sidecar.json echo_plugin.py
-          cd ../..
-          unzip -l echo-python.zip
-
-      - name: Install it as a plugin
-        run: |
-          bowire --plugin-dir "$PWD/plugins" plugin install --file echo-python.zip
-          bowire --plugin-dir "$PWD/plugins" plugin list --verbose
-
-      - name: Discover through the real host
-        run: |
-          out=$(bowire --plugin-dir "$PWD/plugins" discover --url "echo@http://localhost:1")
-          echo "$out"
-          echo "$out" | grep -q "Echo"
+      - name: Install the example and discover through the real host
+        run: python scripts/e2e.py --bowire "$RUNNER_TEMP/bowire-tool/bowire" --work "$RUNNER_TEMP/e2e"
 
   gate:
     name: gate
