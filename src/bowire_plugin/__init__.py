@@ -27,6 +27,12 @@ Ship the script + a ``sidecar.json`` manifest in a zip and install it
 with ``bowire plugin install --file my-plugin.zip``.
 """
 from ._http import run_http
+from ._manual_entry import (
+    ManualCallKind,
+    ManualEntryForm,
+    ManualField,
+    manual_entry_problems,
+)
 from ._models import (
     FieldInfo,
     InvokeResult,
@@ -47,6 +53,9 @@ __all__ = [
     "BowirePlugin",
     "FieldInfo",
     "InvokeResult",
+    "ManualCallKind",
+    "ManualEntryForm",
+    "ManualField",
     "MessageInfo",
     "MethodInfo",
     "PluginSetting",
@@ -54,6 +63,7 @@ __all__ = [
     "SettingOption",
     "Settings",
     "__version__",
+    "manual_entry_problems",
     "run",
     "run_http",
 ]

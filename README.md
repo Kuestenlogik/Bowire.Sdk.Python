@@ -102,6 +102,43 @@ What the accessors guarantee:
 - `settings` is also a read-only mapping of exactly what the host sent:
   `dict(settings)`, `"verbose" in settings`, `settings.get("mode")`.
 
+## Hand-entry form
+
+A user can call your plugin without discovery, from the workbench's freeform
+form or Compose, and only your plugin knows what such a call needs. Declare it
+in `manual_entry()`. The SDK sends it in the `initialize` reply, and the
+workbench renders a Compose form from it and offers exactly these method types
+in the freeform form (Bowire 2.11 or later).
+
+```python
+from bowire_plugin import ManualCallKind, ManualEntryForm, ManualField
+
+def manual_entry(self) -> ManualEntryForm:
+    return ManualEntryForm(
+        url_placeholder="mybroker://localhost:9000",
+        call_kinds=[
+            ManualCallKind("produce", "Unary", label="Produce", service="{topic}", method="produce"),
+            ManualCallKind("consume", "ServerStreaming", label="Consume", service="{topic}", method="consume"),
+        ],
+        fields=[
+            ManualField("topic", label="Topic", placement="template", required=True),
+            ManualField("key", label="Key", call_kinds=["produce"]),
+        ],
+    )
+```
+
+- A **call kind** names how it runs: `Unary` is `invoke`, `ServerStreaming`
+  is `invoke_stream`, and `ClientStreaming` or `Duplex` opens a channel.
+  `service` and `method` are templates, in which `{key}` is the value of the
+  field with that key.
+- A **field** with `placement="template"` only feeds the templates. The
+  default, `"metadata"`, goes into the call's metadata under its `key`, which
+  is where your `invoke` reads it.
+- A form the host would refuse raises `ValueError` where it is built, naming
+  the problem. Examples are an unknown method type, a placeholder no field
+  declares, and a `select` without options. `manual_entry_problems(form)`
+  runs the same check.
+
 ## Ship it
 
 Put the script next to a `sidecar.json` manifest:
@@ -184,11 +221,12 @@ notifications (`$/stream/data`, …). Point the manifest at it with
 | `invoke(server_url, service, method, json_messages, show_internal, metadata, settings)` | unary call | `InvokeResult` |
 | `invoke_stream(...)` | server-streaming call | iterator of JSON strings (each → one frame) |
 | `settings()` | once, for the `initialize` reply | `list[PluginSetting]` |
+| `manual_entry()` | for the `initialize` reply | `ManualEntryForm`, or `None` for no form |
 | `shutdown()` | host exit | `None` (cleanup hook) |
 
 Class attributes: `id` (required, matches the manifest), `name`, `icon_svg`.
 
-Models — `ServiceInfo`, `MethodInfo`, `MessageInfo`, `FieldInfo`, `InvokeResult`, `PluginSetting`, `SettingOption` — are dataclasses that serialize to the camelCase shapes the host expects. `Settings` is the per-call argument described under [Settings](#settings).
+Models — `ServiceInfo`, `MethodInfo`, `MessageInfo`, `FieldInfo`, `InvokeResult`, `PluginSetting`, `SettingOption`, `ManualEntryForm`, `ManualCallKind`, `ManualField` — are dataclasses that serialize to the camelCase shapes the host expects. `Settings` is the per-call argument described under [Settings](#settings).
 
 ## Example
 

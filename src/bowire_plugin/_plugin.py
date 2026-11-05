@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 
+from ._manual_entry import ManualEntryForm
 from ._models import InvokeResult, PluginSetting, ServiceInfo
 from ._settings import Settings
 
@@ -39,6 +40,14 @@ class BowirePlugin:
         declared here are what its accessors return for a key nobody set.
         """
         return []
+
+    def manual_entry(self) -> ManualEntryForm | None:
+        """How a call to this plugin is entered by hand (Kuestenlogik/Bowire#1003).
+
+        Sent in the ``initialize`` reply as ``manualEntry``; the workbench
+        renders a Compose form from it. Default: none.
+        """
+        return None
 
     def discover(
         self, server_url: str, show_internal: bool, settings: Settings

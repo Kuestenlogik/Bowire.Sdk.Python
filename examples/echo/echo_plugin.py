@@ -29,6 +29,8 @@ from collections.abc import Iterator
 from bowire_plugin import (
     BowirePlugin,
     InvokeResult,
+    ManualCallKind,
+    ManualEntryForm,
     MethodInfo,
     PluginSetting,
     ServiceInfo,
@@ -70,6 +72,17 @@ class EchoPlugin(BowirePlugin):
                 default_value=5,
             ),
         ]
+
+    def manual_entry(self) -> ManualEntryForm:
+        # How the two methods are called by hand, without discovery
+        # (Kuestenlogik/Bowire#1003): the workbench renders a form from this.
+        return ManualEntryForm(
+            call_kinds=[
+                ManualCallKind("echo", "Unary", label="Echo", service="Echo", method="echo",
+                               body_example='{"text": "hello"}'),
+                ManualCallKind("ticker", "ServerStreaming", label="Ticker", service="Echo", method="ticker"),
+            ]
+        )
 
     def discover(
         self, server_url: str, show_internal: bool, settings: Settings

@@ -35,6 +35,7 @@ import re
 import subprocess
 import sys
 import threading
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -136,6 +137,27 @@ def _sse_data(url: str) -> Iterator[dict[str, Any]]:
     raise SystemExit("stream ended without its done event")
 
 
+def _manual_entry(base: str) -> None:
+    """Kuestenlogik/Bowire#1003: the host serves the form the example
+    declares. A host before Bowire 2.11 has no ManualEntry service (404);
+    CI installs the latest released tool, so there that is a note until 2.11
+    is out."""
+    try:
+        body = json.loads(_request("GET", f"{base}/api/v1/manual-entry-forms?pageSize=200"))
+    except urllib.error.HTTPError as ex:
+        if ex.code == 404:
+            print("manual entry: skipped, this host predates Bowire 2.11", flush=True)
+            return
+        raise
+    echo = next((f for f in body.get("forms", []) if f.get("protocol") == "echo"), None)
+    if echo is None:
+        raise SystemExit(f"the host serves no form for echo: {body}")
+    kinds = [f"{k['id']}:{k['methodType']}" for k in echo.get("callKinds", [])]
+    if kinds != ["echo:Unary", "ticker:ServerStreaming"]:
+        raise SystemExit(f"the echo form carries the wrong call kinds: {kinds}")
+    print("manual entry: the declared form is served", flush=True)
+
+
 def _settings_round_trip(bowire: str, plugin_dir: Path, storage: Path) -> None:
     storage.mkdir(parents=True, exist_ok=True)
     proc, base = _serve(bowire, plugin_dir)
@@ -179,6 +201,8 @@ def _settings_round_trip(bowire: str, plugin_dir: Path, storage: Path) -> None:
             raise SystemExit("invoke did not see the settings set for it")
         if ticks() != 2:
             raise SystemExit("invokeStream did not see the settings set for it")
+
+        _manual_entry(base)
     finally:
         proc.terminate()
         proc.wait()

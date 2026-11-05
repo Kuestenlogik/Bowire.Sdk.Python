@@ -128,14 +128,19 @@ class _Dispatcher:
         self, method: str | None, params: dict[str, Any]
     ) -> tuple[Any, Callable[[], None] | None]:
         if method == "initialize":
-            return {
+            reply: dict[str, Any] = {
                 "name": self._plugin.name,
                 "id": self._plugin.id,
                 "iconSvg": self._plugin.icon_svg,
                 "settings": [s.to_dict() for s in self._declared_settings()],
                 "protocolVersion": SIDECAR_PROTOCOL_VERSION,
                 "capabilities": _capabilities(self._plugin),
-            }, None
+            }
+            # Kuestenlogik/Bowire#1003 - absent when the plugin declares none.
+            form = self._plugin.manual_entry()
+            if form is not None:
+                reply["manualEntry"] = form.to_dict()
+            return reply, None
         if method == "ping":
             return "pong", None
         if method == "shutdown":
