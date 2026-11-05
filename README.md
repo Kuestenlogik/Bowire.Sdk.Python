@@ -242,6 +242,15 @@ Or install it into a real Bowire host, discover through it, and round-trip its s
 python scripts/e2e.py --bowire "$(command -v bowire)" --work "$(mktemp -d)"
 ```
 
+## Releasing
+
+Pushing a tag `vX.Y.Z` that matches `version` in `pyproject.toml` publishes
+`bowire-plugin` to PyPI (`.github/workflows/release.yml`). The workflow tests
+that commit, builds the sdist and the wheel, and uploads them through PyPI
+Trusted Publishing from the `pypi` environment, so no API token is stored. A
+version already on PyPI is skipped. To publish an existing tag again, run the
+workflow by hand with that tag.
+
 ## Not in scope
 
 Sidecars implement **protocols**, not host extensions (auth providers, UI widgets, mock emitters stay .NET). Full duplex channels (`open_channel`) are on the roadmap; today expose long-lived streams via `invoke_stream`.
