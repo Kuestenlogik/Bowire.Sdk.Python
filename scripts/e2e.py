@@ -21,17 +21,25 @@ It is Python rather than shell so the same steps run on Linux and Windows:
 the manifest names its interpreter, and a manifest that only works on one
 platform is the failure this exists to catch.
 
-    python scripts/e2e.py --bowire <path-to-bowire> --work <empty-temp-dir>
+    python scripts/e2e.py --bowire <path-to-bowire> --work <empty-temp-dir> [--transport http]
 
 The interpreter the host spawns is whatever ``python`` the caller's ``PATH``
 resolves — the SDK has to be installed there, the way a plugin author
 installs it.
+
+With ``--transport http`` (#8) the host does not spawn the sidecar: this
+script starts the example in HTTP mode on a port the OS picks, installs a zip
+whose manifest says ``"transport": "http"`` and points ``"url"`` at it, and
+runs the same checks. The sidecar is the script's to stop, not the host's;
+it is stopped while the host is still connected, and has to exit cleanly.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -48,6 +56,7 @@ _EXAMPLE = _REPO / "examples" / "echo"
 _PLUGIN_FILES = ("sidecar.json", "echo_plugin.py")
 _SERVER_URL = "echo@http://localhost:1"
 _BANNER = re.compile(r"Bowire is running at:\s+(\S+)")
+_LISTENING = re.compile(r"listening on (http://\S+)")
 
 # Loopback only; a proxy from the runner's environment has no business here.
 _HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -62,6 +71,52 @@ def _package(work: Path) -> Path:
             zf.write(_EXAMPLE / name, arcname=name)
     print(f"packaged {archive}: {', '.join(_PLUGIN_FILES)}", flush=True)
     return archive
+
+
+def _start_http_sidecar() -> tuple[subprocess.Popen[str], str]:
+    """Start the example as an http sidecar and return it with its URL.
+
+    The example prints its URL once the socket accepts connections, so
+    reading its stdout up to that line is the readiness handshake, and
+    ``:0`` lets the OS pick the port.
+    """
+    cmd = [sys.executable, str(_EXAMPLE / "echo_plugin.py"), "--http", "127.0.0.1:0"]
+    print("$ " + " ".join(cmd), flush=True)
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True,
+                            encoding="utf-8", errors="replace")
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        match = _LISTENING.search(line)
+        if match:
+            threading.Thread(target=_drain, args=(proc.stdout,), daemon=True).start()
+            return proc, match.group(1)
+    raise SystemExit(f"the http sidecar exited ({proc.wait()}) before it was listening")
+
+
+def _package_http(work: Path, url: str) -> Path:
+    """A zip with nothing but a manifest: an http sidecar ships no code to
+    the host, only where to reach it."""
+    stdio = json.loads((_EXAMPLE / "sidecar.json").read_text(encoding="utf-8"))
+    manifest = {k: v for k, v in stdio.items() if k not in ("executable", "args", "envPrefix")}
+    manifest.update(packageId=stdio["packageId"] + ".Http", transport="http", url=url)
+    archive = work / "echo-python-http.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("sidecar.json", json.dumps(manifest, indent=2))
+    print(f"packaged {archive}: sidecar.json -> {url}", flush=True)
+    return archive
+
+
+def _stop_http_sidecar(proc: subprocess.Popen[str]) -> None:
+    """Stop the sidecar the way a container manager does, and require a
+    clean exit. On Windows there is no such signal a process can handle,
+    so there the exit is only awaited."""
+    proc.send_signal(signal.SIGTERM)
+    code = proc.wait()
+    if os.name != "nt" and code != 0:
+        raise SystemExit(f"the http sidecar did not stop cleanly: exit {code}")
+    print(f"http sidecar: stopped with the host still connected (exit {code})", flush=True)
 
 
 def _bowire(bowire: str, plugin_dir: Path, *args: str) -> str:
@@ -158,7 +213,8 @@ def _manual_entry(base: str) -> None:
     print("manual entry: the declared form is served", flush=True)
 
 
-def _settings_round_trip(bowire: str, plugin_dir: Path, storage: Path) -> None:
+def _settings_round_trip(bowire: str, plugin_dir: Path, storage: Path,
+                         sidecar: subprocess.Popen[str] | None) -> None:
     storage.mkdir(parents=True, exist_ok=True)
     proc, base = _serve(bowire, plugin_dir)
     try:
@@ -203,6 +259,8 @@ def _settings_round_trip(bowire: str, plugin_dir: Path, storage: Path) -> None:
             raise SystemExit("invokeStream did not see the settings set for it")
 
         _manual_entry(base)
+        if sidecar is not None:
+            _stop_http_sidecar(sidecar)
     finally:
         proc.terminate()
         proc.wait()
@@ -213,23 +271,35 @@ def main() -> int:
     parser.add_argument("--bowire", required=True, help="the bowire executable to drive")
     parser.add_argument("--work", required=True, type=Path,
                         help="an empty directory for the zip and the plugin tree")
+    parser.add_argument("--transport", choices=("stdio", "http"), default="stdio",
+                        help="spawned by the host (stdio) or running on its own (http)")
     opts = parser.parse_args()
 
     work: Path = opts.work.resolve()
     work.mkdir(parents=True, exist_ok=True)
     plugin_dir = work / "plugins"
 
-    archive = _package(work)
-    _bowire(opts.bowire, plugin_dir, "plugin", "install", "--file", str(archive))
-    _bowire(opts.bowire, plugin_dir, "plugin", "list", "--verbose")
+    sidecar: subprocess.Popen[str] | None = None
+    try:
+        if opts.transport == "http":
+            sidecar, url = _start_http_sidecar()
+            archive = _package_http(work, url)
+        else:
+            archive = _package(work)
+        _bowire(opts.bowire, plugin_dir, "plugin", "install", "--file", str(archive))
+        _bowire(opts.bowire, plugin_dir, "plugin", "list", "--verbose")
 
-    out = _bowire(opts.bowire, plugin_dir, "discover", "--url", "echo@http://localhost:1")
-    if "Echo" not in out:
-        raise SystemExit("discover succeeded but listed no Echo service")
+        out = _bowire(opts.bowire, plugin_dir, "discover", "--url", "echo@http://localhost:1")
+        if "Echo" not in out:
+            raise SystemExit("discover succeeded but listed no Echo service")
 
-    _settings_round_trip(opts.bowire, plugin_dir, work / "workspace")
+        _settings_round_trip(opts.bowire, plugin_dir, work / "workspace", sidecar)
+    finally:
+        if sidecar is not None and sidecar.poll() is None:
+            sidecar.kill()
+            sidecar.wait()
 
-    print("e2e: ok", flush=True)
+    print(f"e2e: ok ({opts.transport})", flush=True)
     return 0
 
 

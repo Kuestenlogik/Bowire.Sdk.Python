@@ -44,14 +44,19 @@ jobs:
   # there is the one that runs the plugin. The script then starts the
   # workbench, sets the example's settings through the Settings dialog's own
   # endpoint and checks the next invoke and stream use them (#4).
+  #
+  # Both transports (#8): over stdio the host spawns the sidecar; over http
+  # the script starts it on its own, installs a manifest that points at it,
+  # runs the same checks, and stops it while the host is still connected.
   e2e:
-    name: e2e against Bowire (${{ matrix.os }})
+    name: e2e against Bowire (${{ matrix.os }}, ${{ matrix.transport }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        transport: [stdio, http]
     defaults:
       run:
         shell: bash
@@ -79,7 +84,9 @@ jobs:
         run: dotnet tool install Kuestenlogik.Bowire.Tool --tool-path "$RUNNER_TEMP/bowire-tool"
 
       - name: Install the example, discover, and round-trip its settings
-        run: python scripts/e2e.py --bowire "$RUNNER_TEMP/bowire-tool/bowire" --work "$RUNNER_TEMP/e2e"
+        run: >-
+          python scripts/e2e.py --transport ${{ matrix.transport }}
+          --bowire "$RUNNER_TEMP/bowire-tool/bowire" --work "$RUNNER_TEMP/e2e"
 
   gate:
     name: gate

@@ -213,6 +213,21 @@ notifications (`$/stream/data`, …). Point the manifest at it with
 | Best for | local plugin shipped as a zip | hosted / remote / shared by many hosts |
 | Deps | none | none (stdlib `http.server`) |
 
+An http sidecar outlives the hosts that use it. Every connected host gets
+every notification on its own SSE stream. A host's `shutdown` is answered,
+and the server keeps serving. `run_http` stops on SIGTERM (what a container
+manager sends) or Ctrl-C, ends the SSE streams hosts hold open, and returns
+0. Pass `port=0` and `on_listening=` to let the OS pick a free port and
+learn which one it picked:
+
+```python
+run_http(MyPlugin(), port=0, on_listening=lambda port: print(f"listening on {port}"))
+```
+
+The echo example runs this way with `python echo_plugin.py --http
+127.0.0.1:0`. `scripts/e2e.py --transport http` drives it through a real
+host, and CI runs both transports.
+
 ## API surface
 
 | Override | When it's called | Return |

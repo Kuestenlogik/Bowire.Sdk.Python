@@ -14,6 +14,11 @@ uses it — no restart.
 Run it standalone for a smoke test:
     echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | python echo_plugin.py
 
+Or serve it over HTTP/SSE, on its own, for a manifest that says
+``"transport": "http"`` and points ``"url"`` at it (port 0 lets the OS pick;
+the line printed once it listens says which):
+    python echo_plugin.py --http 127.0.0.1:0
+
 Or package echo_plugin.py + sidecar.json into a zip and install:
     bowire plugin install --file echo-sidecar.zip
     bowire --url echo://demo
@@ -24,6 +29,7 @@ bit — it is a module the interpreter runs, on every platform alike.
 """
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 
 from bowire_plugin import (
@@ -37,6 +43,7 @@ from bowire_plugin import (
     SettingOption,
     Settings,
     run,
+    run_http,
 )
 
 
@@ -140,5 +147,20 @@ class EchoPlugin(BowirePlugin):
             yield f'{{"tick":{i}}}'
 
 
+def _main(argv: list[str]) -> int:
+    if not argv:
+        return run(EchoPlugin())
+    if len(argv) == 2 and argv[0] == "--http":
+        host, _, port = argv[1].rpartition(":")
+        return run_http(
+            EchoPlugin(),
+            host=host or "127.0.0.1",
+            port=int(port),
+            on_listening=lambda bound: print(f"listening on http://{host}:{bound}/", flush=True),
+        )
+    print("usage: echo_plugin.py [--http <host:port>]", file=sys.stderr)
+    return 2
+
+
 if __name__ == "__main__":
-    run(EchoPlugin())
+    sys.exit(_main(sys.argv[1:]))
