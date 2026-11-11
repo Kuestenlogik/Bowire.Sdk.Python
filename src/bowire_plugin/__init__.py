@@ -46,7 +46,7 @@ from ._plugin import BowirePlugin
 from ._runtime import SIDECAR_PROTOCOL_VERSION, run
 from ._settings import Settings
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "SIDECAR_PROTOCOL_VERSION",
