@@ -86,10 +86,18 @@ class BowirePlugin:
         """Server-streaming call: yield each message (a JSON string) as
         it arrives. The runtime forwards every yielded value to the host
         as a ``$/stream/data`` notification and sends ``$/stream/end``
-        when the generator finishes. Default: an empty stream."""
+        when the generator finishes. Default: an empty stream.
+
+        A stream is stopped when the sidecar stops and, over http, when
+        the session of the host that started it ends. The runtime then
+        drops the value the generator yields next and closes the
+        generator, so cleanup belongs in a ``finally`` or a ``with``
+        around the ``yield``."""
         return iter(())
 
     def shutdown(self) -> None:
-        """Optional cleanup hook, called when the host asks the sidecar
-        to exit. Default: no-op."""
+        """Optional cleanup hook, called once, when the sidecar itself
+        stops: over stdio when the host sends ``shutdown`` or closes stdin,
+        over http when the server is stopped. A host that leaves an http sidecar does not
+        trigger it. Default: no-op."""
         return

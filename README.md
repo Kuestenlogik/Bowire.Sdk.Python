@@ -213,12 +213,35 @@ notifications (`$/stream/data`, …). Point the manifest at it with
 | Best for | local plugin shipped as a zip | hosted / remote / shared by many hosts |
 | Deps | none | none (stdlib `http.server`) |
 
-An http sidecar outlives the hosts that use it. Every connected host gets
-every notification on its own SSE stream. A host's `shutdown` is answered,
-and the server keeps serving. `run_http` stops on SIGTERM (what a container
-manager sends) or Ctrl-C, ends the SSE streams hosts hold open, and returns
-0. Pass `port=0` and `on_listening=` to let the OS pick a free port and
-learn which one it picked:
+An http sidecar outlives the hosts that use it, and serves several at once.
+What keeps them apart is the session
+([spec](https://github.com/Kuestenlogik/Bowire/blob/main/docs/architecture/sidecar-plugins.md#sessions-over-http)):
+a host sends an id of its own as the `Bowire-Session` header on every `POST`
+and on the SSE `GET`. The runtime handles all of it; a plugin sees no
+session.
+
+- A stream belongs to the session of the request that started it, and its
+  notifications go to the SSE streams of that session only. One host never
+  reads another host's frames.
+- A session ends when its host sends `shutdown`, or when its last SSE stream
+  closes (a host that crashed or lost the network). The session's streams
+  are stopped; every other session is served on. Ending a session twice is
+  harmless.
+- A stopped stream ends where it next yields: the value is dropped and the
+  generator is closed, so cleanup in a `finally` or a `with` around the
+  `yield` runs. A generator that is blocked waiting for its source is
+  stopped once the source next produces something.
+- Requests without the header form one unnamed session, shared by every
+  host that sends none. Their notifications go to the SSE streams opened
+  without the header. A `shutdown` without the header is answered and ends
+  nothing.
+- The plugin's `shutdown()` hook is not a session event. It runs once, when
+  the server stops.
+
+`run_http` stops on SIGTERM (what a container manager sends) or Ctrl-C, ends
+the SSE streams hosts hold open, stops every stream, runs the plugin's
+`shutdown()` hook, and returns 0. Pass `port=0` and `on_listening=` to let
+the OS pick a free port and learn which one it picked:
 
 ```python
 run_http(MyPlugin(), port=0, on_listening=lambda port: print(f"listening on {port}"))
@@ -237,7 +260,7 @@ host, and CI runs both transports.
 | `invoke_stream(...)` | server-streaming call | iterator of JSON strings (each → one frame) |
 | `settings()` | once, for the `initialize` reply | `list[PluginSetting]` |
 | `manual_entry()` | for the `initialize` reply | `ManualEntryForm`, or `None` for no form |
-| `shutdown()` | host exit | `None` (cleanup hook) |
+| `shutdown()` | once, when the sidecar stops: the host's `shutdown` or a closed stdin over stdio, the server stopping over http | `None` (cleanup hook) |
 
 Class attributes: `id` (required, matches the manifest), `name`, `icon_svg`.
 

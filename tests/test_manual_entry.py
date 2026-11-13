@@ -43,7 +43,7 @@ class _Plugin(BowirePlugin):
 
 
 def _initialize(plugin: BowirePlugin) -> dict:
-    reply, _ = _Dispatcher(plugin, lambda _frame: None).handle("initialize", 1, {})
+    reply, _ = _Dispatcher(plugin, lambda _frame, _session: None).handle("initialize", 1, {})
     assert reply is not None
     return reply["result"]
 

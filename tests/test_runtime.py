@@ -152,6 +152,35 @@ def test_shutdown_acks_and_stops():
     assert all(m.get("id") != 8 for m in out)
 
 
+def test_stdin_closing_without_a_shutdown_runs_the_plugins_hook_once():
+    # The host is gone without a word; the process is stopping all the same.
+    class _Hooked(_Fake):
+        shutdowns = 0
+
+        def shutdown(self) -> None:
+            self.shutdowns += 1
+
+    plugin = _Hooked()
+    stdin = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}\n')
+    _StdioRuntime(plugin, stdin, io.StringIO()).run()
+    assert plugin.shutdowns == 1
+
+
+def test_shutdown_over_stdio_runs_the_plugins_hook_once():
+    # Over stdio the host owns the process, so its `shutdown` is the sidecar
+    # stopping: the one moment the plugin's hook runs.
+    class _Counting(_Fake):
+        shutdowns = 0
+
+        def shutdown(self) -> None:
+            self.shutdowns += 1
+
+    plugin = _Counting()
+    stdin = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"shutdown","params":{}}\n')
+    _StdioRuntime(plugin, stdin, io.StringIO()).run()
+    assert plugin.shutdowns == 1
+
+
 def test_malformed_json_line_is_skipped():
     stdin = io.StringIO('not json\n{"jsonrpc":"2.0","id":9,"method":"ping","params":{}}\n')
     stdout = io.StringIO()
